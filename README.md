@@ -1,5 +1,7 @@
 # MT5 Lab — primeira etapa
 
+Roadmap completo: [`docs/ROADMAP.md`](docs/ROADMAP.md).
+
 Python 3.13, ambiente virtual local e diagnostico somente leitura de conta demo.
 Nao ha estrategia, backtester ou executor de ordens nesta etapa.
 Nao altere permissoes de negociacao automatica para rodar este diagnostico.
