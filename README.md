@@ -104,3 +104,20 @@ Exemplo configuravel:
 ```
 
 Referencia: https://www.mql5.com/en/docs/python_metatrader5
+
+## Treinamento B3 / Clear
+
+Com o terminal conectado ao servidor `ClearInvestimentos-DEMO`:
+
+```powershell
+.\.venv\Scripts\python.exe b3_backtest.py
+```
+
+O perfil inicial usa `WINV26`, M5, saldo local de R$ 500 e exatamente um
+minicontrato. Considera R$ 0,20 por ponto, tick de 5 pontos, um tick de slippage,
+stop de R$ 20, limite diário de R$ 30 e zeragem intradiária. O custo padrão de
+R$ 1 por lado é apenas uma hipótese conservadora até confirmarmos todas as tarifas.
+Este módulo não contém chamada de envio de ordens e nunca altera a conta demo.
+O histórico é dividido cronologicamente em 70% para desenvolvimento e 30% para
+teste fora da amostra. Se o saldo ficar abaixo do risco mínimo de uma operação,
+novas entradas são bloqueadas.

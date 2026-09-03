@@ -1,3 +1,4 @@
 MetaTrader5
 numpy
 pytest
+tzdata
