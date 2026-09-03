@@ -121,3 +121,15 @@ Este módulo não contém chamada de envio de ordens e nunca altera a conta demo
 O histórico é dividido cronologicamente em 70% para desenvolvimento e 30% para
 teste fora da amostra. Se o saldo ficar abaixo do risco mínimo de uma operação,
 novas entradas são bloqueadas.
+
+Paper trading específico da B3:
+
+```powershell
+.\.venv\Scripts\python.exe b3_paper.py
+.\.venv\Scripts\python.exe b3_paper.py --watch --interval 30
+```
+
+O estado separado fica em `paper/WINV26-M5-state.json`. Fora do pregão, o
+programa apenas aguarda. O arquivo vazio `paper/B3_KILL_SWITCH` bloqueia entradas
+e encerra posições fictícias na próxima cotação saudável. Nenhuma função de
+envio, alteração ou cancelamento de ordens existe neste módulo.
