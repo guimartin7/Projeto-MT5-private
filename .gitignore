@@ -1,0 +1,7 @@
+.venv/
+.venv-old/
+__pycache__/
+.pytest_cache/
+reports/
+paper/
+.env
