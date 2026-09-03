@@ -135,3 +135,13 @@ O estado separado fica em `paper/WINV26-M5-state.json`. Fora do pregão, o
 programa apenas aguarda. O arquivo vazio `paper/B3_KILL_SWITCH` bloqueia entradas
 e encerra posições fictícias na próxima cotação saudável. Nenhuma função de
 envio, alteração ou cancelamento de ordens existe neste módulo.
+
+Pré-validação da futura ordem Demo (somente durante a janela de entrada):
+
+```powershell
+.\.venv\Scripts\python.exe demo_preflight.py --direction buy
+```
+
+Esse comando exige Clear Demo, Netting, `WINV26`, um contrato, nenhuma exposição
+prévia, feed saudável e negociação algorítmica habilitada. Calcula margem e chama
+apenas `order_check`; nunca chama `order_send`.
