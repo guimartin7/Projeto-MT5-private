@@ -230,7 +230,11 @@ def fetch_closed_bars(api, terminal, symbol, timeframe, count, metadata=None):
         if metadata is not None:
             info = api.symbol_info(symbol)
             tick = api.symbol_info_tick(symbol)
-            metadata.update(point=float(info.point), tick_time=None if tick is None else tick.time)
+            metadata.update(
+                point=float(info.point), tick_time=None if tick is None else tick.time,
+                tick_bid=None if tick is None else float(tick.bid),
+                tick_ask=None if tick is None else float(tick.ask),
+            )
         return bars
     finally:
         api.shutdown()

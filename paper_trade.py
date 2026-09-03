@@ -7,6 +7,7 @@ from pathlib import Path
 
 from backtest import fetch_closed_bars, strategy_positions
 from risk import RiskLimits, entry_risk_check, update_risk_state
+from health import assess_feed
 
 
 INITIAL_STATE = {
@@ -34,10 +35,24 @@ def load_state(path):
         state.setdefault(key, value)
     state.setdefault('daily_return_pct', 0.0)
     state.setdefault('drawdown_pct', 0.0)
+    validate_state(state)
     return state
 
 
+def validate_state(state):
+    if state.get('cash', 0) < 0 or state.get('units', 0) < 0:
+        raise ValueError('Estado inconsistente: valores negativos.')
+    if state.get('position') == 'FLAT' and state.get('units') != 0:
+        raise ValueError('Estado inconsistente: FLAT com unidades.')
+    if state.get('position') == 'LONG' and state.get('units', 0) <= 0:
+        raise ValueError('Estado inconsistente: LONG sem unidades.')
+    if state.get('position') not in {'FLAT', 'LONG'}:
+        raise ValueError('Estado inconsistente: posicao desconhecida.')
+    return True
+
+
 def save_state(path, state):
+    validate_state(state)
     path.parent.mkdir(exist_ok=True)
     temporary = path.with_suffix('.tmp')
     temporary.write_text(json.dumps(state, indent=2), encoding='utf-8')
@@ -45,7 +60,7 @@ def save_state(path, state):
 
 
 def process_latest_closed_bar(state, bars, point, cost_bps=2.0, limits=None,
-                              kill_switch=False):
+                              kill_switch=False, quote=None):
     latest = bars[-1]
     stamp = int(latest['time'])
     if state['last_processed_bar'] is not None and stamp <= state['last_processed_bar']:
@@ -53,7 +68,10 @@ def process_latest_closed_bar(state, bars, point, cost_bps=2.0, limits=None,
     desired, _ = strategy_positions(bars, 'sma_trend', fast=20, slow=50)
     should_hold = desired[-1]
     mid = float(latest['close'])
-    spread = float(latest['spread']) * point
+    bid = mid - float(latest['spread']) * point / 2
+    ask = mid + float(latest['spread']) * point / 2
+    if quote is not None:
+        bid, ask = quote
     fee = cost_bps / 10000
     current_equity = state['cash'] + state['units'] * mid
     session_date = datetime.fromtimestamp(stamp, timezone.utc).date().isoformat()
@@ -63,7 +81,7 @@ def process_latest_closed_bar(state, bars, point, cost_bps=2.0, limits=None,
     if should_hold and state['position'] == 'FLAT':
         decision = entry_risk_check(state, limits, kill_switch)
         if decision['allowed']:
-            price = (mid + spread / 2) * (1 + fee)
+            price = ask * (1 + fee)
             state['units'] = state['cash'] / price
             state['cash'] = 0.0
             state['position'] = 'LONG'
@@ -75,7 +93,7 @@ def process_latest_closed_bar(state, bars, point, cost_bps=2.0, limits=None,
             event = {'action': 'RISK_BLOCK', 'bar_time': stamp,
                      'reasons': decision['reasons']}
     elif not should_hold and state['position'] == 'LONG':
-        price = (mid - spread / 2) * (1 - fee)
+        price = bid * (1 - fee)
         state['cash'] = state['units'] * price
         state['units'] = 0.0
         state['position'] = 'FLAT'
@@ -86,6 +104,7 @@ def process_latest_closed_bar(state, bars, point, cost_bps=2.0, limits=None,
     state['equity'] = round(state['cash'] + state['units'] * mid, 2)
     update_risk_state(state, state['equity'], session_date)
     state['updated_at_utc'] = datetime.now(timezone.utc).isoformat()
+    validate_state(state)
     return state, event
 
 
@@ -101,10 +120,20 @@ def run_once(api, args, state_path):
     bars = fetch_closed_bars(api, args.terminal, args.symbol, api.TIMEFRAME_M5,
                              250, metadata)
     state = load_state(state_path)
+    feed = assess_feed(metadata['tick_time'], metadata['tick_bid'], metadata['tick_ask'])
+    state['feed_health'] = feed
+    if not feed['healthy']:
+        event = {'action': 'FEED_BLOCK', 'reason': feed['status']}
+        state['updated_at_utc'] = datetime.now(timezone.utc).isoformat()
+        state.setdefault('equity', round(state['cash'] + state['units'] * state.get('last_price', 0), 2))
+        save_state(state_path, state)
+        append_event(state_path.parent / f'{args.symbol}-M5-events.jsonl', event, state)
+        return state, event
     kill_switch = state_path.parent.joinpath('KILL_SWITCH').exists()
     limits = RiskLimits(args.max_daily_loss, args.max_drawdown, args.max_entries)
     state, event = process_latest_closed_bar(state, bars, metadata['point'],
-                                             args.cost_bps, limits, kill_switch)
+                                             args.cost_bps, limits, kill_switch,
+                                             (metadata['tick_bid'], metadata['tick_ask']))
     state['symbol'] = args.symbol
     state['server_timestamp_note'] = 'Timestamp bruto do servidor; offset ainda sob auditoria.'
     save_state(state_path, state)
@@ -135,6 +164,7 @@ def main():
                               'daily_return_pct': round(state['daily_return_pct'], 4),
                               'drawdown_pct': round(state['drawdown_pct'], 4),
                               'entries_today': state['entries_today'],
+                              'feed_health': state.get('feed_health'),
                               'state': str(state_path)}, indent=2))
             if not args.watch:
                 return 0

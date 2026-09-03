@@ -2,7 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from paper_trade import INITIAL_STATE, load_state, process_latest_closed_bar, save_state
+from paper_trade import (INITIAL_STATE, load_state, process_latest_closed_bar,
+                         save_state, validate_state)
 from risk import RiskLimits
 
 
@@ -55,3 +56,15 @@ def test_kill_switch_blocks_new_entry():
     assert event['action'] == 'RISK_BLOCK'
     assert event['reasons'] == ['kill_switch_active']
     assert state['position'] == 'FLAT'
+
+
+def test_live_quote_is_used_for_paper_fill():
+    state, event = process_latest_closed_bar(dict(INITIAL_STATE), bars(), .01, 0,
+                                             quote=(150, 151))
+    assert event['price'] == 151
+
+
+def test_inconsistent_state_is_rejected():
+    broken = dict(INITIAL_STATE, position='FLAT', units=1)
+    with pytest.raises(ValueError, match='inconsistente'):
+        validate_state(broken)

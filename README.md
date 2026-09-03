@@ -88,6 +88,15 @@ Para bloquear novas entradas imediatamente, crie o arquivo vazio
 `paper/KILL_SWITCH`. Saidas continuam permitidas. Cada decisao e registrada em
 `paper/EURUSD-M5-events.jsonl` para auditoria.
 
+O simulador valida a idade da cotacao compensando o deslocamento estimado do
+servidor e bloqueia decisões com feed ausente, antigo ou invalido. Entradas e
+saidas ficticias usam o Bid/Ask atual; o candle fechado serve apenas para o sinal.
+Para consultar o estado sem conectar ao MT5:
+
+```powershell
+.\.venv\Scripts\python.exe paper_status.py
+```
+
 Exemplo configuravel:
 
 ```powershell
