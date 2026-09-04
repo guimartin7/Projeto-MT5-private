@@ -145,3 +145,32 @@ Pré-validação da futura ordem Demo (somente durante a janela de entrada):
 Esse comando exige Clear Demo, Netting, `WINV26`, um contrato, nenhuma exposição
 prévia, feed saudável e negociação algorítmica habilitada. Calcula margem e chama
 apenas `order_check`; nunca chama `order_send`.
+
+Reconciliação somente leitura da conta Demo:
+
+```powershell
+.\.venv\Scripts\python.exe reconcile_demo.py
+```
+
+O comando classifica a exposição como limpa, gerenciada ou conflitante, distingue
+posições/ordens manuais pelo identificador do projeto e compara a corretora com o
+estado local esperado. Divergências bloqueiam futuras entradas.
+
+Estado das barreiras de execução, também somente leitura:
+
+```powershell
+.\.venv\Scripts\python.exe execution_readiness.py
+```
+
+O diário de execução usa um ID determinístico por ativo, candle e direção. Uma
+tentativa com resultado desconhecido bloqueia qualquer nova intenção até haver
+evidência da corretora ou revisão manual. Isso evita duplicação após reinício ou
+queda entre o envio e a gravação da resposta.
+
+O gateway Demo exige preparação e execução separadas. A preparação chama
+`order_check`, persiste a intenção e exibe uma frase específica. A execução exige
+essa frase simultaneamente no argumento e na variável `MT5_DEMO_EXECUTION_ARM`.
+O estado `SENT` é gravado antes de `order_send`; após a resposta, somente uma
+posição de um contrato com o identificador correto e stop confirmado recebe o
+estado `CONFIRMED`. O comando de execução não deve ser usado antes da primeira
+operação supervisionada e explicitamente autorizada.
