@@ -2,8 +2,11 @@
 import argparse
 import json
 import os
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
-from demo_execution_gateway import default_journal_path, execute_prepared
+from demo_execution_gateway import (default_journal_path, default_permit_path,
+                                    execute_prepared)
 
 
 def main():
@@ -18,7 +21,8 @@ def main():
     try:
         result = execute_prepared(
             mt5, default_journal_path(), args.intent, args.confirm_demo_order,
-            os.environ.get('MT5_DEMO_EXECUTION_ARM'))
+            os.environ.get('MT5_DEMO_EXECUTION_ARM'), default_permit_path(),
+            datetime.now(ZoneInfo('America/Sao_Paulo')).date().isoformat())
     except (RuntimeError, ValueError, OSError, json.JSONDecodeError) as error:
         print(f'BLOQUEADO: {error}')
         return 2

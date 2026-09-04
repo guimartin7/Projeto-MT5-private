@@ -5,6 +5,7 @@ from pathlib import Path
 from demo_preflight import PreflightConfig, run_preflight
 from execution_journal import (create_intent, journal_readiness, load_journal,
                                save_journal, transition)
+from execution_policy import evaluate_execution_policy, load_daily_permit
 from reconciliation import MANAGED_MAGIC, broker_snapshot
 
 
@@ -42,7 +43,8 @@ def _protected_position(api, symbol):
     return len(matching) == 1 and bool(matching[0].sl)
 
 
-def execute_prepared(api, journal_path, intent_id, confirmation, environment_arm):
+def execute_prepared(api, journal_path, intent_id, confirmation, environment_arm,
+                     permit_path, today):
     journal = load_journal(journal_path)
     intent = next((item for item in journal['intents'] if item['id'] == intent_id), None)
     if intent is None or intent['status'] != 'PREFLIGHT_APPROVED':
@@ -50,6 +52,13 @@ def execute_prepared(api, journal_path, intent_id, confirmation, environment_arm
     required = arm_phrase(intent)
     if confirmation != required or environment_arm != required:
         raise RuntimeError('Dupla confirmação Demo ausente ou incorreta.')
+    snapshot = broker_snapshot(api)
+    permit = load_daily_permit(permit_path, today)
+    policy = evaluate_execution_policy(snapshot, journal_readiness({
+        **journal, 'intents': [entry for entry in journal['intents']
+                               if entry['id'] != intent_id]}), permit, today)
+    if not policy['allowed']:
+        raise RuntimeError(f'Política de execução bloqueou: {policy["blockers"]}')
     config = PreflightConfig(direction=intent['direction'])
     preflight = run_preflight(api, config)
     if not preflight['check_approved']:
@@ -85,3 +94,7 @@ def execute_prepared(api, journal_path, intent_id, confirmation, environment_arm
 
 def default_journal_path():
     return Path(__file__).parent / 'paper' / 'demo-execution-journal.json'
+
+
+def default_permit_path():
+    return Path(__file__).parent / 'paper' / 'DEMO_EXECUTION_PERMIT.json'

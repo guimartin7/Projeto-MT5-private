@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from b3_costs import DEFAULT_WIN_COSTS
 from b3_instrument import futures_pnl, load_b3_spec
 from backtest import fetch_closed_bars, simple_moving_average
 from health import assess_feed
@@ -76,8 +77,10 @@ def desired_direction(bars, fast=9, slow=21):
 
 
 def process_bar(state, bars, spec, bid, ask, moment, stop_reais=20.0,
-                daily_loss_reais=30.0, cost_per_side=1.0,
-                slippage_ticks=1.0, kill_switch=False):
+                daily_loss_reais=30.0,
+                cost_per_side=DEFAULT_WIN_COSTS.normal_cost_per_side,
+                slippage_ticks=DEFAULT_WIN_COSTS.slippage_ticks,
+                kill_switch=False):
     validate_state(state)
     stamp = int(bars[-1]['time'])
     phase = market_phase(moment)
@@ -200,7 +203,8 @@ def main():
     parser.add_argument('--terminal', default=r'C:\Program Files\MetaTrader 5\terminal64.exe')
     parser.add_argument('--symbol', default='WINV26')
     parser.add_argument('--initial-balance', type=float, default=500)
-    parser.add_argument('--cost-per-side', type=float, default=1)
+    parser.add_argument('--cost-per-side', type=float,
+                        default=DEFAULT_WIN_COSTS.normal_cost_per_side)
     parser.add_argument('--watch', action='store_true')
     parser.add_argument('--interval', type=int, default=30)
     args = parser.parse_args()

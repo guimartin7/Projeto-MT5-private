@@ -118,11 +118,22 @@ Com o terminal conectado ao servidor `ClearInvestimentos-DEMO`:
 O perfil inicial usa `WINV26`, M5, saldo local de R$ 500 e exatamente um
 minicontrato. Considera R$ 0,20 por ponto, tick de 5 pontos, um tick de slippage,
 stop de R$ 20, limite diário de R$ 30 e zeragem intradiária. O custo padrão de
-R$ 1 por lado é apenas uma hipótese conservadora até confirmarmos todas as tarifas.
+R$ 1 por lado separa corretagem Clear (R$ 0) de uma hipótese conservadora e
+configurável para taxas B3. Liquidação compulsória não entra no custo normal.
 Este módulo não contém chamada de envio de ordens e nunca altera a conta demo.
 O histórico é dividido cronologicamente em 70% para desenvolvimento e 30% para
 teste fora da amostra. Se o saldo ficar abaixo do risco mínimo de uma operação,
 novas entradas são bloqueadas.
+
+Diagnóstico de margem, sem `order_check` e sem `order_send`:
+
+```powershell
+.\.venv\Scripts\python.exe margin_diagnostic.py
+```
+
+A referência pública versionada é R$ 155 por WIN no day trade, mas o cálculo
+do servidor MT5, quando houver cotação válida, sempre prevalece. Fora do pregão
+o diagnóstico informa indisponibilidade em vez de estimar margem como confirmada.
 
 Paper trading específico da B3:
 
@@ -174,3 +185,20 @@ O estado `SENT` é gravado antes de `order_send`; após a resposta, somente uma
 posição de um contrato com o identificador correto e stop confirmado recebe o
 estado `CONFIRMED`. O comando de execução não deve ser usado antes da primeira
 operação supervisionada e explicitamente autorizada.
+
+Mesmo com a frase dupla, o envio permanece bloqueado sem um arquivo local
+`paper/DEMO_EXECUTION_PERMIT.json`, válido somente para a data corrente e contendo
+servidor, ativo e volume exatos. A política também recalcula pela própria Clear o
+resultado diário e o número de entradas do projeto; os limites iniciais são perda
+de R$ 30 e três entradas. O arquivo de permissão não é versionado.
+
+Recuperação após queda ou resultado inconclusivo:
+
+```powershell
+.\.venv\Scripts\python.exe recover_demo.py
+```
+
+Esse comando nunca envia ordens. Ele usa posições, ordens e negócios da Clear
+para confirmar intenções `SENT`/`UNKNOWN` e cancela preparações de dias anteriores
+somente quando a corretora está completamente zerada. Evidência parcial ou posição
+sem stop permanece bloqueada para revisão.

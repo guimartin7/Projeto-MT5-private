@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from b3_costs import DEFAULT_WIN_COSTS
 from b3_instrument import futures_pnl, load_b3_spec
 from backtest import fetch_closed_bars, simple_moving_average
 from diagnose import validate_bars
@@ -15,8 +16,9 @@ SAO_PAULO = ZoneInfo('America/Sao_Paulo')
 
 def run_futures_backtest(bars, spec, initial_balance=500.0, contracts=1,
                          fast=9, slow=21, stop_reais=20.0,
-                         daily_loss_reais=30.0, cost_per_side=1.0,
-                         slippage_ticks=1.0):
+                         daily_loss_reais=30.0,
+                         cost_per_side=DEFAULT_WIN_COSTS.normal_cost_per_side,
+                         slippage_ticks=DEFAULT_WIN_COSTS.slippage_ticks):
     validate_bars(bars)
     if contracts != 1:
         raise ValueError('Treinamento inicial limitado a exatamente 1 contrato.')
@@ -94,6 +96,7 @@ def run_futures_backtest(bars, spec, initial_balance=500.0, contracts=1,
         'capital_blocks': capital_blocks,
         'stop_reais': stop_reais, 'daily_loss_reais': daily_loss_reais,
         'cost_per_side_reais_assumption': cost_per_side,
+        'default_cost_model': DEFAULT_WIN_COSTS.to_dict(),
         'slippage_ticks': slippage_ticks, 'strategy': f'SMA {fast}/{slow}',
         'instrument': spec.to_dict(), 'trade_log': trades,
         'approved_for_orders': False,
@@ -123,7 +126,8 @@ def main():
     parser.add_argument('--symbol', default='WINV26')
     parser.add_argument('--bars', type=int, default=10000)
     parser.add_argument('--initial-balance', type=float, default=500)
-    parser.add_argument('--cost-per-side', type=float, default=1)
+    parser.add_argument('--cost-per-side', type=float,
+                        default=DEFAULT_WIN_COSTS.normal_cost_per_side)
     args = parser.parse_args()
     import MetaTrader5 as mt5
     terminal = r'C:\Program Files\MetaTrader 5\terminal64.exe'
