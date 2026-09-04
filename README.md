@@ -161,6 +161,17 @@ virgem. A confirmação definitiva dependerá de candles futuros ainda não vist
 Também há uma variante SMA 20/50 com filtro de distância mínima de 20 pontos
 entre as médias, para evitar cruzamentos sem força.
 
+Protótipo do painel desktop, somente leitura:
+
+```powershell
+.\.venv\Scripts\python.exe desktop_dashboard.py
+```
+
+O painel acompanha o estado local do paper trading, saldo, patrimônio, posição,
+resultado diário, drawdown e alertas. Ele não conecta a execução, não chama
+`order_check`/`order_send` e não possui controle de ordens. O empacotamento em
+`.exe` fica para depois da validação visual e da confirmação de requisitos.
+
 Diagnóstico de margem, sem `order_check` e sem `order_send`:
 
 ```powershell
