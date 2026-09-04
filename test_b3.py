@@ -53,6 +53,22 @@ def test_period_split_is_chronological():
     assert report['development_bars'] == 840
     assert report['out_of_sample_bars'] == 360
     assert report['approved_for_orders'] is False
+    assert report['research_gate']['approved_for_orders'] is False
+    assert report['research_gate']['verdict'] in {
+        'PASS_RESEARCH_GATE', 'FAIL_RESEARCH_GATE'}
+
+
+def test_backtest_includes_trade_statistics():
+    report = run_futures_backtest(bars(), SPEC, cost_per_side=0)
+    assert report['statistics']['sample_size'] == report['trades']
+    assert 'profit_factor' in report['statistics']
+    assert 'approx_expectancy_95pct_interval' in report['statistics']
+
+
+def test_backtest_accepts_trend_strength_filter():
+    report = run_futures_backtest(bars(), SPEC, min_ma_gap_points=10,
+                                  cost_per_side=0)
+    assert report['min_ma_gap_points'] == 10
 
 
 def test_insufficient_capital_blocks_entries():
@@ -60,3 +76,15 @@ def test_insufficient_capital_blocks_entries():
                                   stop_reais=20, cost_per_side=1)
     assert report['trades'] == 0
     assert report['capital_blocks'] > 0
+
+
+def test_strategy_drawdown_limit_stops_new_entries():
+    adverse = bars(500)
+    for index, bar in enumerate(adverse):
+        price = 150000 + (50 if (index // 12) % 2 else 0)
+        bar.update(open=price, high=price + 10, low=price - 10, close=price)
+    report = run_futures_backtest(adverse, SPEC, initial_balance=500,
+                                  max_strategy_drawdown_reais=1,
+                                  cost_per_side=1)
+    assert report['drawdown_blocks'] > 0
+    assert report['max_strategy_drawdown_reais'] == 1

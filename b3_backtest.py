@@ -7,7 +7,9 @@ from zoneinfo import ZoneInfo
 
 from b3_costs import DEFAULT_WIN_COSTS
 from b3_instrument import futures_pnl, load_b3_spec
-from backtest import fetch_closed_bars, simple_moving_average
+from b3_signals import build_directions, strategy_label
+from b3_validation import evaluate_research_gate, trade_statistics
+from backtest import fetch_closed_bars
 from diagnose import validate_bars
 
 
@@ -16,22 +18,31 @@ SAO_PAULO = ZoneInfo('America/Sao_Paulo')
 
 def run_futures_backtest(bars, spec, initial_balance=500.0, contracts=1,
                          fast=9, slow=21, stop_reais=20.0,
+                         strategy='sma', breakout_window=20,
+                         min_ma_gap_points=0.0,
                          daily_loss_reais=30.0,
+                         max_strategy_drawdown_reais=100.0,
+                         max_entries_per_day=3,
                          cost_per_side=DEFAULT_WIN_COSTS.normal_cost_per_side,
                          slippage_ticks=DEFAULT_WIN_COSTS.slippage_ticks):
     validate_bars(bars)
     if contracts != 1:
         raise ValueError('Treinamento inicial limitado a exatamente 1 contrato.')
-    if initial_balance <= 0 or stop_reais <= 0 or daily_loss_reais <= 0:
+    if (initial_balance <= 0 or stop_reais <= 0 or daily_loss_reais <= 0 or
+            max_strategy_drawdown_reais <= 0 or max_entries_per_day <= 0):
         raise ValueError('Parâmetros financeiros inválidos.')
-    closes = [float(bar['close']) for bar in bars]
-    fast_ma, slow_ma = simple_moving_average(closes, fast), simple_moving_average(closes, slow)
+    directions = build_directions(bars, strategy, fast, slow, breakout_window,
+                                   min_ma_gap_points)
+    warmup = slow if strategy == 'sma' else breakout_window
     balance = peak = initial_balance
     max_drawdown = 0.0
     position = None
     trades = []
     daily_pnl = {}
+    daily_entries = {}
     blocked_entries = 0
+    drawdown_blocks = 0
+    daily_entry_blocks = 0
     capital_blocks = 0
     slip = spec.tick_size * slippage_ticks
 
@@ -51,11 +62,13 @@ def run_futures_backtest(bars, spec, initial_balance=500.0, contracts=1,
         peak = max(peak, balance)
         max_drawdown = min(max_drawdown, balance - peak)
 
-    for index in range(slow + 1, len(bars)):
+    for index in range(warmup + 1, len(bars)):
         bar = bars[index]
         moment = local_time(bar)
         day = moment.date().isoformat()
-        previous_signal = 1 if fast_ma[index - 1] > slow_ma[index - 1] else -1
+        previous_signal = directions[index - 1]
+        if previous_signal is None:
+            continue
         if position:
             stop_points = stop_reais / (spec.value_per_point * contracts)
             if position['direction'] == 1 and float(bar['low']) <= position['entry_price'] - stop_points:
@@ -79,29 +92,46 @@ def run_futures_backtest(bars, spec, initial_balance=500.0, contracts=1,
             if daily_pnl.get(day, 0.0) <= -daily_loss_reais:
                 blocked_entries += 1
                 continue
+            if balance - peak <= -max_strategy_drawdown_reais:
+                drawdown_blocks += 1
+                continue
+            if daily_entries.get(day, 0) >= max_entries_per_day:
+                daily_entry_blocks += 1
+                continue
             entry = float(bar['open']) + slip * previous_signal
             position = {'direction': previous_signal, 'entry_time': int(bar['time']),
                         'entry_price': entry, 'day': day, 'contracts': contracts}
+            daily_entries[day] = daily_entries.get(day, 0) + 1
     if position:
         close_position(float(bars[-1]['close']) - slip * position['direction'],
                        int(bars[-1]['time']), 'END_OF_DATA')
     wins = sum(trade['net_pnl'] > 0 for trade in trades)
-    return {
+    report = {
         'mode': 'B3_HISTORICAL_TRAINING_ONLY', 'initial_balance': initial_balance,
         'final_balance': round(balance, 2), 'net_pnl': round(balance - initial_balance, 2),
         'return_pct': round((balance / initial_balance - 1) * 100, 4),
         'max_drawdown_reais': round(max_drawdown, 2), 'trades': len(trades),
         'win_rate_pct': round(wins / len(trades) * 100, 2) if trades else 0.0,
         'blocked_entries': blocked_entries, 'contracts': contracts,
+        'drawdown_blocks': drawdown_blocks,
+        'daily_entry_blocks': daily_entry_blocks,
         'capital_blocks': capital_blocks,
         'stop_reais': stop_reais, 'daily_loss_reais': daily_loss_reais,
+        'max_strategy_drawdown_reais': max_strategy_drawdown_reais,
+        'max_entries_per_day': max_entries_per_day,
         'cost_per_side_reais_assumption': cost_per_side,
         'default_cost_model': DEFAULT_WIN_COSTS.to_dict(),
-        'slippage_ticks': slippage_ticks, 'strategy': f'SMA {fast}/{slow}',
+        'slippage_ticks': slippage_ticks,
+        'strategy': strategy_label(strategy, fast, slow, breakout_window,
+                                   min_ma_gap_points),
+        'min_ma_gap_points': min_ma_gap_points,
         'instrument': spec.to_dict(), 'trade_log': trades,
         'approved_for_orders': False,
         'warning': 'Custo é hipótese conservadora, não tarifa confirmada da Clear.',
     }
+    report['statistics'] = trade_statistics(
+        trades, initial_balance, report['max_drawdown_reais'])
+    return report
 
 
 def evaluate_futures_periods(bars, spec, **kwargs):
@@ -109,16 +139,21 @@ def evaluate_futures_periods(bars, spec, **kwargs):
         raise ValueError('Use ao menos 1.000 candles para separar os períodos.')
     split = int(len(bars) * .70)
     development, out_of_sample = bars[:split], bars[split:]
-    return {
+    development_report = run_futures_backtest(development, spec, **kwargs)
+    out_of_sample_report = run_futures_backtest(out_of_sample, spec, **kwargs)
+    report = {
         'protocol': '70% development / 30% out-of-sample test',
         'total_bars': len(bars), 'development_bars': len(development),
         'out_of_sample_bars': len(out_of_sample),
         'first_bar_utc': datetime.fromtimestamp(int(bars[0]['time']), timezone.utc).isoformat(),
         'last_bar_utc': datetime.fromtimestamp(int(bars[-1]['time']), timezone.utc).isoformat(),
-        'development': run_futures_backtest(development, spec, **kwargs),
-        'out_of_sample': run_futures_backtest(out_of_sample, spec, **kwargs),
+        'development': development_report,
+        'out_of_sample': out_of_sample_report,
         'approved_for_orders': False,
     }
+    report['research_gate'] = evaluate_research_gate(
+        development_report, out_of_sample_report)
+    return report
 
 
 def main():

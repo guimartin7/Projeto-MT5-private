@@ -57,3 +57,22 @@ def test_invalid_position_is_rejected():
     state['position'] = {'direction': 1, 'contracts': 2}
     with pytest.raises(ValueError, match='posição inválida'):
         validate_state(state)
+
+
+def test_strategy_drawdown_blocks_new_paper_entry():
+    state = initial_state()
+    state['peak_equity'] = 500
+    state['balance'] = 390
+    state, event = process_bar(state, bars(), SPEC, 100245, 100250, moment(),
+                               max_strategy_drawdown_reais=100)
+    assert event['action'] == 'RISK_BLOCK'
+    assert 'strategy_drawdown_limit' in event['reasons']
+
+
+def test_paper_daily_entry_limit_matches_demo_policy():
+    state = initial_state()
+    state['session_date'] = moment().date().isoformat()
+    state['entries_today'] = 3
+    state, event = process_bar(state, bars(), SPEC, 100245, 100250, moment())
+    assert event['action'] == 'RISK_BLOCK'
+    assert 'daily_entry_limit' in event['reasons']

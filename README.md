@@ -120,10 +120,46 @@ minicontrato. Considera R$ 0,20 por ponto, tick de 5 pontos, um tick de slippage
 stop de R$ 20, limite diário de R$ 30 e zeragem intradiária. O custo padrão de
 R$ 1 por lado separa corretagem Clear (R$ 0) de uma hipótese conservadora e
 configurável para taxas B3. Liquidação compulsória não entra no custo normal.
+Além disso, novas entradas são interrompidas ao atingir R$ 100 de drawdown a
+partir do pico e o limite operacional é de três entradas por dia, alinhado à
+política da futura execução Demo.
 Este módulo não contém chamada de envio de ordens e nunca altera a conta demo.
 O histórico é dividido cronologicamente em 70% para desenvolvimento e 30% para
 teste fora da amostra. Se o saldo ficar abaixo do risco mínimo de uma operação,
 novas entradas são bloqueadas.
+
+O relatório também calcula fator de lucro, expectativa por operação, pior
+sequência de perdas, drawdown percentual e um intervalo exploratório para a
+expectativa. Um portão de pesquisa exige no teste fora da amostra pelo menos 30
+operações, resultado e expectativa positivos, fator de lucro mínimo de 1,20 e
+drawdown máximo de 20% nos dois períodos. O limite inferior do intervalo
+exploratório de 95% da expectativa também precisa ficar acima de zero. Mesmo
+`PASS_RESEARCH_GATE` nunca autoriza ordens: ele serve apenas para decidir se vale
+avançar para a próxima validação.
+
+Teste exploratório com cenários fixos de custo e slippage:
+
+```powershell
+.\.venv\Scripts\python.exe b3_stress.py
+```
+
+Os cenários baseline, adverso e severo são avaliados separadamente e não servem
+para escolher parâmetros. A estratégia só é marcada como robusta se passar pelo
+portão de pesquisa nos três; mesmo assim, dados futuros continuam obrigatórios.
+
+Seleção de sinais sem executar a reserva cronológica final:
+
+```powershell
+.\.venv\Scripts\python.exe b3_candidate_selection.py
+```
+
+São comparados parâmetros fixos de SMA 9/21, SMA 20/50 e rompimentos de 20 e 40
+candles. Apenas os primeiros 80% entram no cálculo; os 20% finais ficam sem
+métricas de desempenho nesse relatório. Como esse período já apareceu em
+análises anteriores, ele é uma reserva técnica, não um holdout cientificamente
+virgem. A confirmação definitiva dependerá de candles futuros ainda não vistos.
+Também há uma variante SMA 20/50 com filtro de distância mínima de 20 pontos
+entre as médias, para evitar cruzamentos sem força.
 
 Diagnóstico de margem, sem `order_check` e sem `order_send`:
 

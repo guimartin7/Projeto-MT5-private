@@ -78,6 +78,8 @@ def desired_direction(bars, fast=9, slow=21):
 
 def process_bar(state, bars, spec, bid, ask, moment, stop_reais=20.0,
                 daily_loss_reais=30.0,
+                max_strategy_drawdown_reais=100.0,
+                max_entries_per_day=3,
                 cost_per_side=DEFAULT_WIN_COSTS.normal_cost_per_side,
                 slippage_ticks=DEFAULT_WIN_COSTS.slippage_ticks,
                 kill_switch=False):
@@ -138,9 +140,11 @@ def process_bar(state, bars, spec, bid, ask, moment, stop_reais=20.0,
             reasons.append('kill_switch_active')
         if state['daily_realized_pnl'] <= -daily_loss_reais:
             reasons.append('daily_loss_limit')
+        if state['drawdown_reais'] <= -max_strategy_drawdown_reais:
+            reasons.append('strategy_drawdown_limit')
         if state['balance'] < stop_reais + 2 * cost_per_side:
             reasons.append('insufficient_training_balance')
-        if state['entries_today'] >= 5:
+        if state['entries_today'] >= max_entries_per_day:
             reasons.append('daily_entry_limit')
         if reasons:
             state['last_processed_bar'] = stamp
