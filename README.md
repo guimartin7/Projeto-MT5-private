@@ -161,6 +161,15 @@ virgem. A confirmação definitiva dependerá de candles futuros ainda não vist
 Também há uma variante SMA 20/50 com filtro de distância mínima de 20 pontos
 entre as médias, para evitar cruzamentos sem força.
 
+Para gerar o executável local do painel:
+
+```powershell
+.\build_desktop.ps1
+```
+
+O artefato fica em `dist/ProjetoMT5Dashboard/ProjetoMT5Dashboard.exe` e não é
+versionado. Ele continua somente leitura e não inclui estados da pasta `paper/`.
+
 Protótipo do painel desktop, somente leitura:
 
 ```powershell
@@ -171,6 +180,13 @@ O painel acompanha o estado local do paper trading, saldo, patrimônio, posiçã
 resultado diário, drawdown e alertas. Ele não conecta a execução, não chama
 `order_check`/`order_send` e não possui controle de ordens. O empacotamento em
 `.exe` fica para depois da validação visual e da confirmação de requisitos.
+
+O botão `Autorizar sessão Demo` cria somente o arquivo diário de permissão após
+a confirmação exata `AUTORIZAR DEMO WINV26 1 CONTRATO`. Isso não envia ordem nem
+substitui Algo Trading habilitado, `order_check`, reconciliação ou autorização
+final do gateway.
+Quando executado como `.exe`, o painel grava a permissão e lê o estado na pasta
+`paper/` ao lado da raiz do projeto, e não em diretórios temporários do empacotador.
 
 Diagnóstico de margem, sem `order_check` e sem `order_send`:
 

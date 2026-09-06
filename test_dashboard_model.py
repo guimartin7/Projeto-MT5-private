@@ -1,6 +1,16 @@
 import json
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
-from dashboard_model import load_dashboard_snapshot
+from dashboard_model import load_dashboard_snapshot, market_status
+
+TZ = ZoneInfo('America/Sao_Paulo')
+
+
+def test_market_status_reflects_weekend_holiday_and_open_window():
+    assert market_status(datetime(2026, 9, 6, 10, tzinfo=TZ))['code'] == 'CLOSED'
+    assert market_status(datetime(2026, 9, 7, 10, tzinfo=TZ))['code'] == 'CLOSED'
+    assert market_status(datetime(2026, 9, 8, 10, tzinfo=TZ))['code'] == 'OPEN'
 
 
 def test_dashboard_snapshot_is_read_only_and_surfaces_state(tmp_path):
@@ -16,6 +26,7 @@ def test_dashboard_snapshot_is_read_only_and_surfaces_state(tmp_path):
     assert snapshot['entries_today'] == 2
     assert snapshot['read_only'] is True
     assert 'order_send' not in snapshot
+    assert snapshot['market']['code'] in {'OPEN', 'OBSERVE_ONLY', 'FLATTEN_ONLY', 'CLOSED'}
 
 
 def test_dashboard_snapshot_handles_missing_state(tmp_path):
