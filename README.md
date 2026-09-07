@@ -169,6 +169,20 @@ Para gerar o executável local do painel:
 
 O artefato fica em `dist/ProjetoMT5Dashboard/ProjetoMT5Dashboard.exe` e não é
 versionado. Ele continua somente leitura e não inclui estados da pasta `paper/`.
+O botão `Sincronizar dados` combina a releitura do estado local com a consulta
+dos contratos/cotações do MT5 e atualiza os indicadores em uma única ação.
+O painel também exibe uma tabela comparativa dos contratos encontrados (tipo,
+moeda, bid/ask, spread e status), apenas para visualização e apoio à decisão.
+Clique em uma linha para selecionar um contrato para análise. O painel identifica
+se ele está disponível para validação ou se permanece somente informativo. A
+execução continua restrita ao `WINV26` até que cada novo contrato tenha seus
+próprios custos, margem, estratégia e testes aprovados.
+No `.exe`, a consulta usa o Python do projeto como processo separado para evitar
+conflitos binários entre PyInstaller, NumPy e o módulo MetaTrader5.
+
+O botão `Atualizar mercado` consulta os contratos WIN/WDO da Clear Demo e grava
+um relatório local com cotação e spread. Sem cotação válida, nenhum candidato
+fica elegível e nenhuma ordem é enviada.
 
 Protótipo do painel desktop, somente leitura:
 
