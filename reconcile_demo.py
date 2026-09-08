@@ -12,6 +12,18 @@ def main():
     try:
         snapshot = broker_snapshot(mt5)
         snapshot['expected_flat_check'] = compare_expected(snapshot)
+        deals = snapshot.get('recent_deals', [])
+        exits = [deal for deal in deals if deal.get('entry') == 1]
+        if exits:
+            last = exits[-1]
+            snapshot['last_exit'] = {
+                'ticket': last.get('ticket'),
+                'price': last.get('price'),
+                'profit': last.get('profit', 0.0),
+                'reason': ('STOP/LOSS' if float(last.get('profit', 0) or 0) < 0
+                           else 'TAKE_PROFIT/OUTRO')}
+        else:
+            snapshot['last_exit'] = None
     except RuntimeError as error:
         print(f'ERRO: {error}')
         return 2

@@ -26,8 +26,8 @@ class Dashboard(tk.Tk):
         self.state_path = Path(state_path)
         self.refresh_ms = refresh_ms
         self.title('Projeto MT5 — Paper Trading (somente leitura)')
-        self.geometry('1000x760')
-        self.minsize(900, 680)
+        self.geometry('1000x680')
+        self.minsize(900, 600)
         self.configure(bg='#0b1220')
         style = ttk.Style(self)
         style.theme_use('clam')
@@ -72,6 +72,17 @@ class Dashboard(tk.Tk):
         self.sync_badge = tk.Label(header, text='', bg='#854d0e', fg='#fef08a',
                                    font=('Segoe UI', 9, 'bold'), padx=10, pady=4)
         self.sync_badge.pack(anchor='w')
+        header_actions = ttk.Frame(header, style='Header.TFrame')
+        header_actions.pack(anchor='w', pady=(12, 0))
+        ttk.Button(header_actions, text='Atualizar agora', command=self.refresh,
+                   style='Dark.TButton').pack(side='left')
+        ttk.Button(header_actions, text='Autorizar Demo', command=self.authorize_session,
+                   style='Dark.TButton').pack(side='left', padx=8)
+        ttk.Button(header_actions, text='Atualizar mercado', command=self.scan_market,
+                   style='Dark.TButton').pack(side='left')
+        self.sync_button = ttk.Button(header_actions, text='Sincronizar dados',
+                                      command=self.synchronize, style='Dark.TButton')
+        self.sync_button.pack(side='left', padx=8)
         body = ttk.Frame(self, style='Body.TFrame', padding=(24, 20)); body.pack(fill='both', expand=True)
         tk.Label(body, text='Resumo da sessão', bg='#111827', fg='#e2e8f0',
                  font=('Segoe UI', 12, 'bold')).pack(anchor='w')
@@ -86,13 +97,13 @@ class Dashboard(tk.Tk):
         tk.Label(body, text='Observação de mercado', bg='#111827', fg='#e2e8f0',
                  font=('Segoe UI', 12, 'bold')).pack(anchor='w')
         table_frame = ttk.Frame(body, style='Body.TFrame'); table_frame.pack(fill='x', pady=(10, 18))
-        columns = ('symbol', 'type', 'currency', 'bid', 'ask', 'spread', 'status')
+        columns = ('symbol', 'type', 'currency', 'bid', 'ask', 'spread', 'status', 'bias', 'reason')
         self.market_tree = ttk.Treeview(table_frame, columns=columns, show='headings',
-                                        height=5, style='Dark.Treeview')
+                                        height=4, style='Dark.Treeview')
         headings = {'symbol': 'CONTRATO', 'type': 'TIPO', 'currency': 'MOEDA',
-                    'bid': 'BID', 'ask': 'ASK', 'spread': 'SPREAD', 'status': 'STATUS'}
+                    'bid': 'BID', 'ask': 'ASK', 'spread': 'SPREAD', 'status': 'STATUS', 'bias': 'VIES', 'reason': 'MOTIVO'}
         widths = {'symbol': 105, 'type': 150, 'currency': 70, 'bid': 105,
-                  'ask': 105, 'spread': 85, 'status': 170}
+                  'ask': 105, 'spread': 85, 'status': 170, 'bias': 110, 'reason': 240}
         for column in columns:
             self.market_tree.heading(column, text=headings[column])
             self.market_tree.column(column, width=widths[column], anchor='w')
@@ -143,7 +154,7 @@ class Dashboard(tk.Tk):
             note = 'selecionado; aguarde cotação válida'
         else:
             note = 'somente análise — ainda não liberado para execução'
-        self.selected_asset.set(f'Contrato selecionado: {symbol}  ·  {note}')
+        self.selected_asset.set(f'Contrato selecionado: {symbol}  ·  {note}  ·  Viés: {values[7]} — {values[8]}')
 
     def authorize_session(self):
         selection = self.market_tree.selection()
@@ -158,8 +169,10 @@ class Dashboard(tk.Tk):
                 return
         confirmation = simpledialog.askstring(
             'Confirmação reforçada',
-            'Digite exatamente:\nAUTORIZAR DEMO WINV26 1 CONTRATO',
-            parent=self, show='*')
+            'Confirmação da sessão Demo (não é senha):\n\n'
+            'AUTORIZAR DEMO WINV26 1 CONTRATO\n\n'
+            'Aceita maiúsculas, minúsculas, espaços e pontuação.',
+            parent=self)
         if confirmation is None:
             return
         try:
@@ -259,7 +272,8 @@ class Dashboard(tk.Tk):
             self.market_tree.insert('', 'end', values=(
                 row['symbol'], kind, row.get('currency_profit', 'BRL'), bid, ask,
                 spread, 'COTAÇÃO OK' if row.get('eligible_for_authorization')
-                else 'SEM COTAÇÃO'))
+                else 'SEM COTAÇÃO', row.get('bias', 'NEUTRO'),
+                row.get('bias_reason', '')))
         blockers = snapshot['readiness'].get('blockers', [])
         permit_status = 'permissão local criada' if self.permit_path.exists() else 'permissão local ausente'
         alerts = ([snapshot['error']] if snapshot['error'] else []) + blockers + [permit_status]

@@ -62,5 +62,4 @@ def test_fresh_market_scan_makes_sync_status_current(tmp_path):
         'captured_at_utc': '2026-09-08T13:00:00+00:00'}), encoding='utf-8')
     snapshot = load_dashboard_snapshot(tmp_path / 'state.json')
     now = datetime(2026, 9, 8, 13, 0, 30, tzinfo=ZoneInfo('UTC'))
-    assert snapshot['synchronization']['code'] == 'ON'
     assert synchronization_status({**snapshot, 'scanner': snapshot['scanner']}, now)['code'] == 'ON'

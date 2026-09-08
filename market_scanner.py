@@ -21,6 +21,32 @@ def score_quote(bid, ask, tick_size):
     return {'status': 'QUOTE_AVAILABLE', 'score': round(score, 2),
             'spread_ticks': round(spread_ticks, 2)}
 
+def directional_bias(row):
+    if row.get('status') != 'QUOTE_AVAILABLE':
+        return {'bias': 'NEUTRO', 'bias_reason': 'sem cotacao valida'}
+    return {'bias': 'NEUTRO', 'bias_reason': 'aguardando historico para tendencia'}
+
+def historical_bias(api, symbol, timeframe=None):
+    """Calcula viés SMA 9/21 quando a API fornece candles suficientes."""
+    fetch = getattr(api, 'copy_rates_from_pos', None)
+    if not callable(fetch):
+        return {'bias': 'NEUTRO', 'bias_reason': 'historico indisponivel'}
+    try:
+        tf = timeframe if timeframe is not None else getattr(api, 'TIMEFRAME_M5', 5)
+        rates = fetch(symbol, tf, 0, 60)
+        if rates is None or len(rates) < 21:
+            return {'bias': 'NEUTRO', 'bias_reason': 'historico insuficiente'}
+        closes = [float(item['close']) for item in rates]
+        fast = sum(closes[-9:]) / 9
+        slow = sum(closes[-21:]) / 21
+        if fast > slow:
+            return {'bias': 'COMPRA', 'bias_reason': 'SMA9 acima da SMA21'}
+        if fast < slow:
+            return {'bias': 'VENDA', 'bias_reason': 'SMA9 abaixo da SMA21'}
+    except (TypeError, ValueError, KeyError, IndexError):
+        return {'bias': 'NEUTRO', 'bias_reason': 'historico invalido'}
+    return {'bias': 'NEUTRO', 'bias_reason': 'medias sem direcao'}
+
 
 def scan_symbols(api):
     account = api.account_info()
@@ -39,13 +65,17 @@ def scan_symbols(api):
         bid = float(getattr(tick, 'bid', 0) or 0)
         ask = float(getattr(tick, 'ask', 0) or 0)
         quote = score_quote(bid, ask, float(info.trade_tick_size))
-        rows.append({
+        row = {
             'symbol': name, 'description': info.description,
             'currency_profit': getattr(info, 'currency_profit', 'BRL'),
             'bid': bid, 'ask': ask, 'tick_size': float(info.trade_tick_size),
             'expiration_time': int(getattr(info, 'expiration_time', 0) or 0),
             **quote, 'eligible_for_authorization': quote['status'] == 'QUOTE_AVAILABLE',
-        })
+        }
+        row.update(directional_bias(row))
+        if name == 'WINV26' and row['status'] == 'QUOTE_AVAILABLE':
+            row.update(historical_bias(api, name))
+        rows.append(row)
     rows.sort(key=lambda row: (-row['score'], row['symbol']))
     return {
         'mode': 'READ_ONLY_MARKET_SCANNER',

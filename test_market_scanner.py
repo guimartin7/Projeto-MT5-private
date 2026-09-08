@@ -3,7 +3,15 @@ from unittest.mock import Mock
 
 import pytest
 
-from market_scanner import is_supported_contract, scan_symbols, score_quote
+from market_scanner import is_supported_contract, scan_symbols, score_quote, historical_bias
+
+def test_historical_bias_uses_sma_direction():
+    api = SimpleNamespace(TIMEFRAME_M5=5,
+                          copy_rates_from_pos=lambda *_: [{'close': 100.0}] * 51)
+    assert historical_bias(api, 'WINV26')['bias'] == 'NEUTRO'
+    api.copy_rates_from_pos = lambda *_: ([{'close': 100.0}] * 42 +
+                                           [{'close': 200.0}] * 9)
+    assert historical_bias(api, 'WINV26')['bias'] == 'COMPRA'
 
 
 def test_scanner_excludes_synthetic_and_non_tradable_symbols():

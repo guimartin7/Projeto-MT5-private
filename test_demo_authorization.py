@@ -31,3 +31,10 @@ def test_authorization_accepts_case_and_extra_spaces(tmp_path):
         tmp_path / 'permit.json', '  autorizar   demo winv26 1 contrato  ',
         now=datetime(2026, 9, 6, 10, 0, tzinfo=TZ))
     assert permit['symbol'] == 'WINV26'
+
+
+def test_authorization_accepts_accidental_punctuation(tmp_path):
+    permit = authorize_demo_session(
+        tmp_path / 'permit.json', 'Autorizar-demo: WINV26 (1) contrato!',
+        now=datetime(2026, 9, 6, 10, 0, tzinfo=TZ))
+    assert permit['max_volume'] == 1

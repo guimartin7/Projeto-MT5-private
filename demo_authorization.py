@@ -10,12 +10,13 @@ SAO_PAULO = ZoneInfo('America/Sao_Paulo')
 
 
 def normalize_confirmation(value):
-    return ' '.join(str(value or '').strip().upper().split())
+    return ''.join(character for character in str(value or '').upper()
+                   if character.isalnum())
 
 
 def authorize_demo_session(path, confirmation, server='ClearInvestimentos-DEMO',
                            symbol='WINV26', max_volume=1, now=None):
-    if normalize_confirmation(confirmation) != CONFIRMATION:
+    if normalize_confirmation(confirmation) != normalize_confirmation(CONFIRMATION):
         raise ValueError('Confirmação da sessão Demo inválida.')
     if server != 'ClearInvestimentos-DEMO' or symbol != 'WINV26' or max_volume != 1:
         raise ValueError('A autorização está limitada à Clear Demo, WINV26 e 1 contrato.')
