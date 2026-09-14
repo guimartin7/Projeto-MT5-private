@@ -16,7 +16,14 @@ from market_scanner import scan_symbols
 def application_directory():
     """Pasta persistente do projeto, inclusive quando congelado pelo PyInstaller."""
     if getattr(sys, 'frozen', False):
-        return Path(sys.executable).resolve().parent.parent.parent
+        executable = Path(sys.executable).resolve()
+        candidates = (executable.parent.parent.parent,
+                      executable.parent.parent.parent.parent,
+                      Path(r'D:\Projeto-MT5'))
+        for candidate in candidates:
+            if (candidate / '.venv' / 'Scripts' / 'python.exe').exists():
+                return candidate
+        return candidates[0]
     return Path(__file__).resolve().parent
 
 
