@@ -8,9 +8,12 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import messagebox, simpledialog, ttk
 
-from dashboard_model import load_dashboard_snapshot
+from dashboard_model import load_dashboard_snapshot, merge_broker_snapshot
 from demo_authorization import CONFIRMATION, authorize_demo_session
 from market_scanner import scan_symbols
+from demo_settings import DemoSettings, points_from_reais, reais_from_points
+
+NO_WINDOW = {'creationflags': subprocess.CREATE_NO_WINDOW} if sys.platform == 'win32' else {}
 
 
 def application_directory():
@@ -33,8 +36,8 @@ class Dashboard(tk.Tk):
         self.state_path = Path(state_path)
         self.refresh_ms = refresh_ms
         self.title('Projeto MT5 — Paper Trading (somente leitura)')
-        self.geometry('1000x680')
-        self.minsize(900, 600)
+        self.geometry('1200x900')
+        self.minsize(1000, 720)
         self.configure(bg='#0b1220')
         style = ttk.Style(self)
         style.theme_use('clam')
@@ -66,6 +69,16 @@ class Dashboard(tk.Tk):
         self.card_vars = {key: tk.StringVar() for key in
                           ('balance', 'equity', 'pnl', 'drawdown')}
         self.details = tk.StringVar(); self.alerts = tk.StringVar()
+        self.operation_summary = tk.StringVar(value='Operação atual: carregando...')
+        self.history_summary = tk.StringVar(value='Histórico: carregando...')
+        self.settings_path = self.state_path.parent / 'demo-settings.json'
+        self.demo_settings = DemoSettings.load(self.settings_path)
+        self.settings_vars = {
+            'max_entries': tk.StringVar(value=str(self.demo_settings.max_entries)),
+            'max_daily_loss': tk.StringVar(value=str(self.demo_settings.max_daily_loss)),
+            'stop_reais': tk.StringVar(value=f'{reais_from_points(self.demo_settings.stop_points):.2f}'),
+            'target_reais': tk.StringVar(value=f'{reais_from_points(self.demo_settings.target_points):.2f}'),
+        }
         header = ttk.Frame(self, style='Header.TFrame', padding=(24, 18))
         header.pack(fill='x')
         ttk.Label(header, text='PROJETO MT5', style='Header.TLabel',
@@ -90,7 +103,16 @@ class Dashboard(tk.Tk):
         self.sync_button = ttk.Button(header_actions, text='Sincronizar dados',
                                       command=self.synchronize, style='Dark.TButton')
         self.sync_button.pack(side='left', padx=8)
-        body = ttk.Frame(self, style='Body.TFrame', padding=(24, 20)); body.pack(fill='both', expand=True)
+        viewport = ttk.Frame(self, style='Body.TFrame'); viewport.pack(fill='both', expand=True)
+        body_canvas = tk.Canvas(viewport, bg='#111827', highlightthickness=0)
+        body_scroll = ttk.Scrollbar(viewport, orient='vertical', command=body_canvas.yview)
+        body = ttk.Frame(body_canvas, style='Body.TFrame', padding=(24, 20))
+        body_window = body_canvas.create_window((0, 0), window=body, anchor='nw')
+        body_canvas.configure(yscrollcommand=body_scroll.set)
+        body_canvas.pack(side='left', fill='both', expand=True); body_scroll.pack(side='right', fill='y')
+        body.bind('<Configure>', lambda _e: body_canvas.configure(scrollregion=body_canvas.bbox('all')))
+        body_canvas.bind('<Configure>', lambda event: body_canvas.itemconfigure(body_window, width=event.width))
+        body_canvas.bind_all('<MouseWheel>', lambda event: body_canvas.yview_scroll(int(-event.delta / 120), 'units'))
         tk.Label(body, text='Resumo da sessão', bg='#111827', fg='#e2e8f0',
                  font=('Segoe UI', 12, 'bold')).pack(anchor='w')
         cards = ttk.Frame(body, style='Body.TFrame'); cards.pack(fill='x', pady=(10, 18))
@@ -120,6 +142,29 @@ class Dashboard(tk.Tk):
         self.market_tree.bind('<<TreeviewSelect>>', self.on_asset_selected)
         scrollbar.pack(side='right', fill='y')
         ttk.Label(body, textvariable=self.selected_asset).pack(anchor='w', pady=(0, 10))
+        ttk.Label(body, textvariable=self.operation_summary, justify='left',
+                  background='#1f2937', foreground='#dbeafe', padding=12,
+                  font=('Consolas', 10)).pack(fill='x', pady=(0, 12))
+        ttk.Label(body, text='Histórico recente do WINV26', style='Section.TLabel').pack(anchor='w')
+        ttk.Label(body, textvariable=self.history_summary, justify='left', anchor='nw',
+                  background='#1f2937', foreground='#cbd5e1', padding=10,
+                  font=('Consolas', 9)).pack(fill='x', pady=(6, 12))
+        settings = ttk.Frame(body, style='Body.TFrame'); settings.pack(fill='x', pady=(0, 10))
+        ttk.Label(settings, text='Configuração Demo', style='Section.TLabel').pack(anchor='w')
+        for key, label in (('max_entries', 'Operações'), ('max_daily_loss', 'Perda diária R$'),
+                           ('stop_reais', 'Stop R$'), ('target_reais', 'Alvo R$')):
+            ttk.Label(settings, text=label).pack(side='left', padx=(0, 4))
+            ttk.Entry(settings, textvariable=self.settings_vars[key], width=8).pack(side='left', padx=(0, 10))
+        ttk.Button(settings, text='Salvar configuração', command=self.save_settings,
+                   style='Dark.TButton').pack(side='left')
+        order_bar = ttk.Frame(body, style='Body.TFrame'); order_bar.pack(fill='x', pady=(0, 12))
+        ttk.Label(order_bar, text='Operação Demo', style='Section.TLabel').pack(side='left', padx=(0, 12))
+        ttk.Button(order_bar, text='Pré-validar COMPRA', command=lambda: self.prepare_order('buy'),
+                   style='Dark.TButton').pack(side='left', padx=4)
+        ttk.Button(order_bar, text='Pré-validar VENDA', command=lambda: self.prepare_order('sell'),
+                   style='Dark.TButton').pack(side='left', padx=4)
+        ttk.Button(order_bar, text='Encerrar posição', command=self.close_position,
+                   style='Dark.TButton').pack(side='left', padx=12)
         lower = ttk.Frame(body, style='Body.TFrame'); lower.pack(fill='both', expand=True)
         left = ttk.Frame(lower, style='Body.TFrame'); left.pack(side='left', fill='both', expand=True, padx=(0, 10))
         right = ttk.Frame(lower, style='Body.TFrame'); right.pack(side='right', fill='both', expand=True)
@@ -147,6 +192,90 @@ class Dashboard(tk.Tk):
     @property
     def permit_path(self):
         return self.state_path.parent / 'DEMO_EXECUTION_PERMIT.json'
+
+    def save_settings(self):
+        try:
+            symbol = self.selected_asset.get().split()[0] if self.selected_asset.get() != 'Nenhum contrato selecionado' else 'WINV26'
+            self.demo_settings = DemoSettings(
+                max_entries=int(self.settings_vars['max_entries'].get()),
+                max_daily_loss=float(self.settings_vars['max_daily_loss'].get()),
+                stop_points=points_from_reais(self.settings_vars['stop_reais'].get(), symbol),
+                target_points=points_from_reais(self.settings_vars['target_reais'].get(), symbol),
+            )
+            self.demo_settings.save(self.settings_path)
+            messagebox.showinfo('Configuração salva', 'Limites Demo atualizados.', parent=self)
+        except (ValueError, OSError) as error:
+            messagebox.showerror('Configuração inválida', str(error), parent=self)
+
+    def prepare_order(self, direction):
+        """Executa somente a pré-validação; não envia ordem."""
+        try:
+            interpreter = (application_directory() / '.venv' / 'Scripts' / 'python.exe'
+                           if getattr(sys, 'frozen', False) else Path(sys.executable))
+            completed = subprocess.run([str(interpreter), str(application_directory() / 'prepare_demo_order.py'),
+                                        '--direction', direction], capture_output=True, text=True, timeout=30, **NO_WINDOW)
+            output = completed.stdout.strip() or completed.stderr.strip()
+            if completed.returncode:
+                messagebox.showerror('Pré-validação bloqueada', output, parent=self)
+            else:
+                try:
+                    report = json.loads(output)
+                    phrase = report.get('required_confirmation')
+                    friendly = f"CONFIRMAR {'COMPRA' if direction == 'buy' else 'VENDA'} WINV26"
+                    confirmed = messagebox.askyesno(
+                        'Confirmar envio Demo',
+                        f"Pré-validação aprovada para {direction.upper()} WINV26.\n\n"
+                        'Enviar 1 contrato agora?\n\n'
+                        'Sim = enviar ordem Demo\nNão = cancelar', parent=self)
+                    if not confirmed:
+                        self.cancel_order(report['intent']['id'])
+                        messagebox.showinfo('Envio cancelado', 'A confirmação não coincidiu. Nenhuma ordem foi enviada.', parent=self)
+                        return
+                    self.execute_order(report['intent']['id'], phrase)
+                except (ValueError, KeyError, TypeError) as error:
+                    messagebox.showerror('Resposta inválida', str(error), parent=self)
+        except (OSError, subprocess.SubprocessError) as error:
+            messagebox.showerror('Falha na pré-validação', str(error), parent=self)
+
+    def cancel_order(self, intent_id):
+        interpreter = (application_directory() / '.venv' / 'Scripts' / 'python.exe'
+                       if getattr(sys, 'frozen', False) else Path(sys.executable))
+        subprocess.run([str(interpreter), str(application_directory() / 'cancel_prepared_demo.py'),
+                        '--intent', intent_id], capture_output=True, text=True, timeout=15, **NO_WINDOW)
+
+    def execute_order(self, intent_id, phrase):
+        interpreter = (application_directory() / '.venv' / 'Scripts' / 'python.exe'
+                       if getattr(sys, 'frozen', False) else Path(sys.executable))
+        environment = dict(__import__('os').environ)
+        environment['MT5_DEMO_EXECUTION_ARM'] = phrase
+        try:
+            completed = subprocess.run(
+                [str(interpreter), str(application_directory() / 'execute_prepared_demo.py'),
+                 '--intent', intent_id, '--confirm-demo-order', phrase],
+                capture_output=True, text=True, timeout=30, env=environment, **NO_WINDOW)
+            output = completed.stdout.strip() or completed.stderr.strip()
+            if completed.returncode:
+                messagebox.showerror('Execução bloqueada', output, parent=self)
+            else:
+                messagebox.showinfo('Operação Demo executada', output, parent=self)
+            self.refresh()
+        except (OSError, subprocess.SubprocessError) as error:
+            messagebox.showerror('Falha na execução', str(error), parent=self)
+
+    def close_position(self):
+        if not messagebox.askyesno('Encerrar posição', 'Deseja zerar a posição WINV26 agora?', parent=self):
+            return
+        interpreter = (application_directory() / '.venv' / 'Scripts' / 'python.exe'
+                       if getattr(sys, 'frozen', False) else Path(sys.executable))
+        try:
+            result = subprocess.run([str(interpreter), str(application_directory() / 'close_demo_position.py'),
+                                     '--confirm-close', 'CLOSE DEMO WINV26'], capture_output=True,
+                                    text=True, timeout=30, **NO_WINDOW)
+            output = result.stdout.strip() or result.stderr.strip()
+            messagebox.showinfo('Encerramento Demo', output, parent=self)
+            self.refresh()
+        except (OSError, subprocess.SubprocessError) as error:
+            messagebox.showerror('Falha ao encerrar', str(error), parent=self)
 
     def on_asset_selected(self, _event=None):
         selection = self.market_tree.selection()
@@ -206,7 +335,7 @@ class Dashboard(tk.Tk):
                     raise RuntimeError('Python do projeto não encontrado para sincronização.')
                 completed = subprocess.run(
                     [str(python), str(application_directory() / 'market_scanner.py')],
-                    capture_output=True, text=True, timeout=30, check=False)
+                    capture_output=True, text=True, timeout=30, check=False, **NO_WINDOW)
                 if completed.returncode:
                     raise RuntimeError(completed.stderr.strip() or completed.stdout.strip())
                 report = json.loads(completed.stdout)
@@ -241,6 +370,15 @@ class Dashboard(tk.Tk):
 
     def refresh(self):
         snapshot = load_dashboard_snapshot(self.state_path)
+        try:
+            interpreter = (application_directory() / '.venv' / 'Scripts' / 'python.exe'
+                           if getattr(sys, 'frozen', False) else Path(sys.executable))
+            result = subprocess.run([str(interpreter), str(application_directory() / 'reconcile_demo.py')],
+                                    capture_output=True, text=True, timeout=8, **NO_WINDOW)
+            if result.returncode in (0, 3) and result.stdout:
+                snapshot = merge_broker_snapshot(snapshot, json.loads(result.stdout))
+        except (OSError, ValueError, json.JSONDecodeError, subprocess.SubprocessError):
+            pass
         self.subtitle.set(f"Clear Demo  •  {snapshot['symbol']}  •  SOMENTE LEITURA")
         market = snapshot['market']
         self.market.set(f"STATUS DO MERCADO: {market['label'].upper()}  |  {market['reason']}")
@@ -260,6 +398,28 @@ class Dashboard(tk.Tk):
         self.card_vars['equity'].set(money(snapshot['equity']))
         self.card_vars['pnl'].set(money(snapshot['daily_realized_pnl']))
         self.card_vars['drawdown'].set(money(snapshot['drawdown_reais']))
+        position = snapshot.get('position')
+        if position:
+            side = 'COMPRA' if int(position.get('type', 0)) == 0 else 'VENDA'
+            self.operation_summary.set(
+                f"OPERAÇÃO ABERTA: {side} {position.get('volume', 0)} {snapshot['symbol']}\n"
+                f"Entrada: {position.get('price_open')}  Atual: {position.get('price_current')}  "
+                f"P/L flutuante: R$ {float(position.get('profit', 0)):,.2f}\n"
+                f"Stop: {position.get('sl')}  Alvo: {position.get('tp')}\n"
+                f"Última saída: {snapshot.get('last_exit') or 'nenhuma nesta leitura'}")
+        else:
+            self.operation_summary.set(
+                f"OPERAÇÃO ATUAL: ZERADA\nÚltima saída: {snapshot.get('last_exit') or 'nenhuma nesta leitura'}")
+        history = snapshot.get('recent_deals', [])[-12:]
+        if history:
+            lines = []
+            for deal in reversed(history):
+                side = 'COMPRA' if int(deal.get('type', 0)) == 0 else 'VENDA'
+                entry = 'ENTRADA' if deal.get('entry') == 0 else 'SAÍDA'
+                lines.append(f"{entry:<8} {side:<6} preço={deal.get('price')}  resultado=R$ {float(deal.get('profit', 0) or 0):,.2f}")
+            self.history_summary.set('\n'.join(lines))
+        else:
+            self.history_summary.set('Nenhuma transação encontrada no histórico recente.')
         self.details.set(
             f"Modo: {snapshot['mode']}\n"
             f"Posição: {snapshot['position'] or 'zerada'}\n"

@@ -51,13 +51,16 @@ def broker_snapshot(api, symbol='WINV26', now=None):
     status = 'CONFLICT' if reasons else ('MANAGED_EXPOSURE' if managed_positions or managed_orders else 'CLEAN')
     return {
         'mode': 'READ_ONLY_RECONCILIATION', 'server': account.server,
+        'balance': getattr(account, 'balance', None),
+        'equity': getattr(account, 'equity', None),
+        'margin_free': getattr(account, 'margin_free', None),
         'symbol': symbol, 'status': status, 'safe_for_new_entry': status == 'CLEAN',
         'conflict_reasons': reasons, 'positions': position_rows, 'orders': order_rows,
         'managed_position_count': len(managed_positions),
         'managed_order_count': len(managed_orders),
         'foreign_position_count': len(foreign_positions),
         'foreign_order_count': len(foreign_orders),
-        'recent_deals': deal_rows[-100:],
+        'recent_deals': deal_rows[-500:],
         'captured_at_utc': end.isoformat(),
     }
 

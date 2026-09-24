@@ -7,6 +7,7 @@ from execution_policy import evaluate_execution_policy, load_daily_permit
 from reconciliation import broker_snapshot
 from datetime import datetime
 from zoneinfo import ZoneInfo
+from demo_settings import DemoSettings
 
 
 def main():
@@ -27,7 +28,10 @@ def main():
     today = datetime.now(ZoneInfo('America/Sao_Paulo')).date().isoformat()
     permit = load_daily_permit(Path(__file__).parent / 'paper' /
                                'DEMO_EXECUTION_PERMIT.json', today)
-    policy = evaluate_execution_policy(snapshot, journal_status, permit, today)
+    settings = DemoSettings.load(Path(__file__).parent / 'paper' / 'demo-settings.json')
+    policy = evaluate_execution_policy(snapshot, journal_status, permit, today,
+                                       max_daily_loss=settings.max_daily_loss,
+                                       max_entries=settings.max_entries)
     blockers = []
     if not snapshot['safe_for_new_entry']:
         blockers.append('broker_reconciliation_conflict')

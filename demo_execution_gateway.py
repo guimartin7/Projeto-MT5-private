@@ -7,6 +7,7 @@ from execution_journal import (create_intent, journal_readiness, load_journal,
                                save_journal, transition)
 from execution_policy import evaluate_execution_policy, load_daily_permit
 from reconciliation import MANAGED_MAGIC, broker_snapshot
+from demo_settings import DemoSettings
 
 
 def arm_phrase(intent):
@@ -54,9 +55,12 @@ def execute_prepared(api, journal_path, intent_id, confirmation, environment_arm
         raise RuntimeError('Dupla confirmação Demo ausente ou incorreta.')
     snapshot = broker_snapshot(api)
     permit = load_daily_permit(permit_path, today)
+    settings = DemoSettings.load(Path(journal_path).parent / 'demo-settings.json')
     policy = evaluate_execution_policy(snapshot, journal_readiness({
         **journal, 'intents': [entry for entry in journal['intents']
-                               if entry['id'] != intent_id]}), permit, today)
+                               if entry['id'] != intent_id]}), permit, today,
+                               max_daily_loss=settings.max_daily_loss,
+                               max_entries=settings.max_entries)
     if not policy['allowed']:
         raise RuntimeError(f'Política de execução bloqueou: {policy["blockers"]}')
     config = PreflightConfig(direction=intent['direction'])

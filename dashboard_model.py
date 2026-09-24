@@ -59,6 +59,22 @@ def market_status(moment=None):
     return {'code': code, 'label': label, 'reason': reason,
             'local_time': local.isoformat()}
 
+def merge_broker_snapshot(snapshot, broker):
+    """Mescla leitura sanitizada do broker no resumo sem permitir execução."""
+    if not broker or broker.get('status') not in {'CLEAN', 'MANAGED_EXPOSURE'}:
+        return snapshot
+    positions = broker.get('positions') or []
+    for key in ('balance', 'equity'):
+        if key in broker:
+            snapshot[key] = broker[key]
+    snapshot['position'] = positions[0] if positions else None
+    snapshot['recent_deals'] = broker.get('recent_deals', [])
+    snapshot['last_exit'] = broker.get('last_exit')
+    if broker.get('last_exit'):
+        snapshot['daily_realized_pnl'] = broker['last_exit'].get('profit', 0.0)
+    snapshot['broker_sync'] = True
+    return snapshot
+
 
 def load_dashboard_snapshot(state_path, readiness=None):
     state = {}
